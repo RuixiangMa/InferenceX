@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).parent / "process_result.py"
+BENCHMARK_SCRIPT_PATH = Path(__file__).parent.parent / "benchmarks" / "single_node" / "zimage-turbo_bf16_h20_vllm-omni.sh"
 
 
 # =============================================================================
@@ -31,6 +32,22 @@ def sample_benchmark_result():
         "tpot_p99_ms": 45.0,
         "e2e_latency_p50_ms": 1500.0,
         "e2e_latency_p99_ms": 2500.0,
+    }
+
+
+@pytest.fixture
+def sample_vllm_omni_benchmark_result():
+    """Sample diffusion benchmark result JSON for vLLM-Omni."""
+    return {
+        "throughput_qps": 3.25,
+        "latency_p50": 2.1,
+        "latency_p99": 4.8,
+        "width": 1024,
+        "height": 1024,
+        "num_inference_steps": 20,
+        "task": "t2i",
+        "dataset": "random",
+        "stage_breakdown": {"denoise": 1.7},
     }
 
 
@@ -59,6 +76,17 @@ def single_node_env_vars(base_env_vars):
         "TP": "8",
         "EP_SIZE": "1",
         "DP_ATTENTION": "false",
+    }
+
+
+@pytest.fixture
+def vllm_omni_env_vars(base_env_vars):
+    """Environment variables for vLLM-Omni diffusion benchmarks."""
+    return {
+        **base_env_vars,
+        "FRAMEWORK": "vllm-omni",
+        "PRECISION": "bf16",
+        "TP": "8",
     }
 
 
@@ -299,6 +327,100 @@ class TestProcessResultScript:
         )
 
         assert result.returncode != 0
+
+
+class TestVllmOmniProcessResult:
+    """Tests for the vLLM-Omni diffusion result branch."""
+
+    def test_vllm_omni_processing(self, tmp_path, sample_vllm_omni_benchmark_result, vllm_omni_env_vars):
+        """Diffusion results should map cleanly into the shared aggregate schema."""
+        result = run_script(tmp_path, vllm_omni_env_vars, sample_vllm_omni_benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+
+        assert output_data["framework"] == "vllm-omni"
+        assert output_data["precision"] == "bf16"
+        assert output_data["is_multinode"] is False
+        assert output_data["tp"] == 8
+        assert output_data["ep"] == 1
+        assert output_data["dp_attention"] == "false"
+        assert output_data["conc"] == 0
+        assert output_data["model"] == ""
+
+        assert output_data["tput_per_gpu"] == pytest.approx(3.25)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(3.25)
+        assert output_data["input_tput_per_gpu"] == 0
+        assert output_data["modality"] == "image"
+        assert output_data["workload_family"] == "diffusion"
+        assert output_data["throughput"] == pytest.approx(3.25)
+        assert output_data["throughput_per_gpu"] == pytest.approx(3.25)
+        assert output_data["throughput_unit"] == "samples/s"
+        assert output_data["latency"] == pytest.approx(2.1)
+        assert output_data["latency_unit"] == "s/sample"
+
+        assert output_data["latency_p50"] == pytest.approx(2.1)
+        assert output_data["latency_p99"] == pytest.approx(4.8)
+        assert output_data["width"] == 1024
+        assert output_data["height"] == 1024
+        assert output_data["output_shape"] == {"width": 1024, "height": 1024}
+        assert output_data["num_inference_steps"] == 20
+        assert output_data["task"] == "t2i"
+        assert output_data["dataset"] == "random"
+        assert output_data["workload_params"] == {
+            "num_inference_steps": 20,
+            "task": "t2i",
+            "dataset": "random",
+        }
+        assert "stage_breakdown" not in output_data
+
+    def test_vllm_omni_preserves_adapted_fields(self, tmp_path, vllm_omni_env_vars):
+        """Adapted max_concurrency/model_id fields from the benchmark script should survive aggregation."""
+        benchmark_result = {
+            "model_id": "Tongyi-MAI/Z-Image-Turbo",
+            "max_concurrency": 12,
+            "throughput_qps": 1.5,
+            "width": 2048,
+            "height": 2048,
+        }
+
+        result = run_script(tmp_path, vllm_omni_env_vars, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["conc"] == 12
+        assert output_data["model"] == "Tongyi-MAI/Z-Image-Turbo"
+        assert output_data["width"] == 2048
+        assert output_data["height"] == 2048
+        assert output_data["output_shape"] == {"width": 2048, "height": 2048}
+
+    def test_vllm_omni_requires_tp(self, tmp_path, sample_vllm_omni_benchmark_result, base_env_vars):
+        """vLLM-Omni aggregation still requires TP metadata for dashboard compatibility."""
+        env = base_env_vars.copy()
+        env["FRAMEWORK"] = "vllm-omni"
+
+        result = run_script(tmp_path, env, sample_vllm_omni_benchmark_result)
+
+        assert result.returncode != 0
+        assert "Missing required environment variables" in result.stderr
+
+
+class TestVllmOmniBenchmarkScript:
+    """Static contract tests for the vLLM-Omni benchmark launcher."""
+
+    def test_script_contains_expected_omni_invocation(self):
+        script = BENCHMARK_SCRIPT_PATH.read_text()
+
+        assert 'vllm serve "$MODEL" --omni' in script
+        assert '--backend vllm-omni' in script
+        assert '--output-file "/workspace/${RESULT_FILENAME}.json"' in script
+
+    def test_script_adapts_diffusion_output_for_process_result(self):
+        script = BENCHMARK_SCRIPT_PATH.read_text()
+
+        assert "'max_concurrency': int(conc)" in script
+        assert "'model_id': model" in script
+        assert 'adapted.update(diffusion)' in script
 
 
 # =============================================================================

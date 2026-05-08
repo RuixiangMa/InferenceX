@@ -8313,3 +8313,19 @@ dsv4-fp4-gb300-dynamo-sglang:
           tp: 12
           ep: 12
           dp-attn: true
+
+# vLLM-Omni Diffusion Model Benchmarks
+zimage-turbo-bf16-h20-vllm-omni:
+  image: ghcr.io/semianalysisai/vllm-omni:zimage-turbo
+  model: Tongyi-MAI/Z-Image-Turbo
+  model-prefix: zimage-turbo
+  runner: h20
+  precision: bf16
+  framework: vllm-omni
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 16 }

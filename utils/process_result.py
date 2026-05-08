@@ -42,6 +42,63 @@ image = base_env['IMAGE']
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
 
+if framework == 'vllm-omni':
+    single_node_env = get_required_env_vars(['TP'])
+    tp_size = int(single_node_env['TP'])
+
+    images_per_sec = float(bmk_result.get('throughput_qps', 0))
+    latency_value = bmk_result.get('latency_per_sample', bmk_result.get('latency_p50'))
+
+    output_shape = {}
+    if bmk_result.get('width') is not None:
+        output_shape['width'] = bmk_result.get('width')
+    if bmk_result.get('height') is not None:
+        output_shape['height'] = bmk_result.get('height')
+
+    workload_params = {}
+    if bmk_result.get('num_inference_steps') is not None:
+        workload_params['num_inference_steps'] = bmk_result.get('num_inference_steps')
+    if bmk_result.get('task') is not None:
+        workload_params['task'] = bmk_result.get('task')
+    if bmk_result.get('dataset') is not None:
+        workload_params['dataset'] = bmk_result.get('dataset')
+
+    data = {
+        'hw': hw,
+        'conc': int(bmk_result.get('max_concurrency', 0)),
+        'image': image,
+        'model': bmk_result.get('model_id', ''),
+        'infmax_model_prefix': model_prefix,
+        'framework': framework,
+        'precision': precision,
+        'spec_decoding': spec_decoding,
+        'disagg': disagg,
+        'isl': int(isl),
+        'osl': int(osl),
+        'is_multinode': False,
+        'tp': tp_size,
+        'ep': 1,
+        'dp_attention': 'false',
+        'tput_per_gpu': images_per_sec,
+        'output_tput_per_gpu': images_per_sec,
+        'input_tput_per_gpu': 0,
+        'modality': 'image',
+        'workload_family': 'diffusion',
+        'throughput': images_per_sec,
+        'throughput_per_gpu': images_per_sec,
+        'throughput_unit': 'samples/s',
+        'latency_unit': 's/sample',
+        'output_shape': output_shape,
+        'workload_params': workload_params,
+    }
+    if latency_value is not None:
+        data['latency'] = latency_value
+    data.update({k: v for k, v in bmk_result.items() if not isinstance(v, dict) and k not in ('throughput_qps', 'max_concurrency', 'model_id')})
+    print(json.dumps(data, indent=2))
+    with open(f'agg_{result_filename}.json', 'w') as f:
+        json.dump(data, f, indent=2)
+    sys.exit(0)
+
 data = {
     'hw': hw,
     'conc': int(bmk_result['max_concurrency']),

@@ -2299,3 +2299,11 @@
     - "Rename and consolidate the per-concurrency recipe files to `disagg-gb300-{N}p1d-{topo}-{nodes}-c{conc}.yaml`"
     - "Re-enable lm-eval scoring for dsv4-fp4-gb300-dynamo-sglang now that the srt-slurm pin includes the lm-eval orchestrator path"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1295
+
+- config-keys:
+    - zimage-turbo-bf16-h20-vllm-omni
+  description:
+    - "Add Z-Image-Turbo diffusion model benchmark using vLLM-Omni on H20"
+    - "Script: benchmarks/single_node/zimage-turbo_bf16_h20_vllm-omni.sh"
+    - "Uses vllm-omni diffusion_benchmark_serving.py for image generation metrics"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TODO
