@@ -179,6 +179,14 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            task: ${{ matrix.config.task || '' }}
+            width: ${{ matrix.config.width || '' }}
+            height: ${{ matrix.config.height || '' }}
+            num-inference-steps: ${{ matrix.config.num-inference-steps || '' }}
+            seed: ${{ matrix.config.seed || '' }}
+            dataset: ${{ matrix.config.dataset || '' }}
+            num-frames: ${{ matrix.config.num-frames || '' }}
+            fps: ${{ matrix.config.fps || '' }}
             run-eval: ${{ matrix.config.run-eval }}
 
     sweep-single-node-8k1k:

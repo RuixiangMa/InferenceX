@@ -58,6 +58,12 @@ if framework == 'vllm-omni':
     workload_params = {}
     if bmk_result.get('num_inference_steps') is not None:
         workload_params['num_inference_steps'] = bmk_result.get('num_inference_steps')
+    if bmk_result.get('num_frames') is not None:
+        workload_params['num_frames'] = bmk_result.get('num_frames')
+    if bmk_result.get('fps') is not None:
+        workload_params['fps'] = bmk_result.get('fps')
+    if bmk_result.get('seed') is not None:
+        workload_params['seed'] = bmk_result.get('seed')
     if bmk_result.get('task') is not None:
         workload_params['task'] = bmk_result.get('task')
     if bmk_result.get('dataset') is not None:
@@ -73,8 +79,9 @@ if framework == 'vllm-omni':
         'precision': precision,
         'spec_decoding': spec_decoding,
         'disagg': disagg,
-        'isl': int(isl),
-        'osl': int(osl),
+        # Diffusion/image benchmarks do not have text sequence lengths; keep schema placeholders at 0.
+        'isl': 0,
+        'osl': 0,
         'is_multinode': False,
         'tp': tp_size,
         'ep': 1,
@@ -84,16 +91,34 @@ if framework == 'vllm-omni':
         'input_tput_per_gpu': 0,
         'modality': 'image',
         'workload_family': 'diffusion',
+        'output_shape': output_shape,
+        'workload_params': workload_params,
         'throughput': images_per_sec,
         'throughput_per_gpu': images_per_sec,
         'throughput_unit': 'samples/s',
         'latency_unit': 's/sample',
-        'output_shape': output_shape,
-        'workload_params': workload_params,
     }
     if latency_value is not None:
         data['latency'] = latency_value
-    data.update({k: v for k, v in bmk_result.items() if not isinstance(v, dict) and k not in ('throughput_qps', 'max_concurrency', 'model_id')})
+
+    # Keep the aggregated diffusion schema compact: width/height live under
+    # output_shape, request config lives under workload_params, and framework
+    # already captures the backend family.
+    excluded_keys = {
+        'throughput_qps',
+        'max_concurrency',
+        'model_id',
+        'backend',
+        'dataset',
+        'task',
+        'width',
+        'height',
+        'num_frames',
+        'num_inference_steps',
+        'fps',
+        'seed',
+    }
+    data.update({k: v for k, v in bmk_result.items() if not isinstance(v, dict) and k not in excluded_keys})
     print(json.dumps(data, indent=2))
     with open(f'agg_{result_filename}.json', 'w') as f:
         json.dump(data, f, indent=2)

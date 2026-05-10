@@ -193,6 +193,20 @@ def generate_full_sweep(args, all_config_data, runner_data):
         framework = val[Fields.FRAMEWORK.value]
         runner = val[Fields.RUNNER.value]
         model_code = val[Fields.MODEL_PREFIX.value]
+        diffusion_fields = {
+            field.value: val.get(field.value)
+            for field in (
+                Fields.TASK,
+                Fields.WIDTH,
+                Fields.HEIGHT,
+                Fields.NUM_INFERENCE_STEPS,
+                Fields.SEED,
+                Fields.DATASET,
+                Fields.NUM_FRAMES,
+                Fields.FPS,
+            )
+            if val.get(field.value) is not None
+        }
 
         # Compute filtered runner nodes for this config if filter is specified
         runner_nodes_to_use = None
@@ -363,6 +377,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.DISAGG.value: disagg,
                                 Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                             }
+                            entry.update(diffusion_fields)
 
                             if ep is not None:
                                 entry[Fields.EP.value] = ep
@@ -520,6 +535,20 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
         model_code = val[Fields.MODEL_PREFIX.value]
         # Get disagg value, defaulting to False if not specified
         disagg = val.get(Fields.DISAGG.value, False)
+        diffusion_fields = {
+            field.value: val.get(field.value)
+            for field in (
+                Fields.TASK,
+                Fields.WIDTH,
+                Fields.HEIGHT,
+                Fields.NUM_INFERENCE_STEPS,
+                Fields.SEED,
+                Fields.DATASET,
+                Fields.NUM_FRAMES,
+                Fields.FPS,
+            )
+            if val.get(field.value) is not None
+        }
 
         # Find 1k1k config
         target_config = None
@@ -625,6 +654,7 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
                     Fields.DISAGG.value: disagg,
                     Fields.RUN_EVAL.value: False,
                 }
+                entry.update(diffusion_fields)
                 matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
     return matrix_values
@@ -674,6 +704,20 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
         if not runners_for_entry:
             continue
         disagg = val.get(Fields.DISAGG.value, False)
+        diffusion_fields = {
+            field.value: val.get(field.value)
+            for field in (
+                Fields.TASK,
+                Fields.WIDTH,
+                Fields.HEIGHT,
+                Fields.NUM_INFERENCE_STEPS,
+                Fields.SEED,
+                Fields.DATASET,
+                Fields.NUM_FRAMES,
+                Fields.FPS,
+            )
+            if val.get(field.value) is not None
+        }
 
         # Build seq-len filter if --seq-lens was provided
         seq_lens_filter = None
@@ -792,6 +836,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.DISAGG.value: disagg,
                                 Fields.RUN_EVAL.value: False,
                             }
+                            entry.update(diffusion_fields)
                             matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
         # ---- Agentic-coding scenarios ----

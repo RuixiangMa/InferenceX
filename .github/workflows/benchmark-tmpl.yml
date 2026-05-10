@@ -87,6 +87,38 @@ on:
         required: false
         type: string
         default: '1800'
+      task:
+        required: false
+        type: string
+        default: ''
+      width:
+        required: false
+        type: string
+        default: ''
+      height:
+        required: false
+        type: string
+        default: ''
+      num-inference-steps:
+        required: false
+        type: string
+        default: ''
+      seed:
+        required: false
+        type: string
+        default: ''
+      dataset:
+        required: false
+        type: string
+        default: ''
+      num-frames:
+        required: false
+        type: string
+        default: ''
+      fps:
+        required: false
+        type: string
+        default: ''
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -114,6 +146,14 @@ env:
   OFFLOADING: ${{ inputs.offloading }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
+  DIFFUSION_TASK: ${{ inputs.task }}
+  IMAGE_WIDTH: ${{ inputs.width }}
+  IMAGE_HEIGHT: ${{ inputs.height }}
+  NUM_INFERENCE_STEPS: ${{ inputs.num-inference-steps }}
+  SEED: ${{ inputs.seed }}
+  DIFFUSION_DATASET: ${{ inputs.dataset }}
+  NUM_FRAMES: ${{ inputs.num-frames }}
+  FPS: ${{ inputs.fps }}
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache

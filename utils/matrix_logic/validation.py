@@ -53,6 +53,16 @@ class Fields(Enum):
     OFFLOADING = 'offloading'
     DURATION = 'duration'
 
+    # Diffusion/image fields
+    TASK = 'task'
+    WIDTH = 'width'
+    HEIGHT = 'height'
+    NUM_INFERENCE_STEPS = 'num-inference-steps'
+    SEED = 'seed'
+    DATASET = 'dataset'
+    NUM_FRAMES = 'num-frames'
+    FPS = 'fps'
+
     # Matrix entry fields
     CONC = 'conc'
     MAX_MODEL_LEN = 'max-model-len'
@@ -99,6 +109,14 @@ class SingleNodeMatrixEntry(BaseModel):
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
+    task: Optional[str] = Field(default=None, alias=Fields.TASK.value)
+    width: Optional[int] = Field(default=None, alias=Fields.WIDTH.value)
+    height: Optional[int] = Field(default=None, alias=Fields.HEIGHT.value)
+    num_inference_steps: Optional[int] = Field(default=None, alias=Fields.NUM_INFERENCE_STEPS.value)
+    seed: Optional[int] = Field(default=None, alias=Fields.SEED.value)
+    dataset: Optional[str] = Field(default=None, alias=Fields.DATASET.value)
+    num_frames: Optional[int] = Field(default=None, alias=Fields.NUM_FRAMES.value)
+    fps: Optional[int] = Field(default=None, alias=Fields.FPS.value)
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
 
@@ -413,6 +431,14 @@ class SingleNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[False]
     disagg: bool = Field(default=False)
+    task: Optional[str] = Field(default=None, alias=Fields.TASK.value)
+    width: Optional[int] = Field(default=None, alias=Fields.WIDTH.value)
+    height: Optional[int] = Field(default=None, alias=Fields.HEIGHT.value)
+    num_inference_steps: Optional[int] = Field(default=None, alias=Fields.NUM_INFERENCE_STEPS.value)
+    seed: Optional[int] = Field(default=None, alias=Fields.SEED.value)
+    dataset: Optional[str] = Field(default=None, alias=Fields.DATASET.value)
+    num_frames: Optional[int] = Field(default=None, alias=Fields.NUM_FRAMES.value)
+    fps: Optional[int] = Field(default=None, alias=Fields.FPS.value)
     scenarios: SingleNodeScenarios
 
 

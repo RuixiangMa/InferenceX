@@ -16,6 +16,7 @@
 #   IMAGE_WIDTH           - Generated image width  (default: 1024)
 #   IMAGE_HEIGHT          - Generated image height (default: 1024)
 #   NUM_INFERENCE_STEPS   - Diffusion denoising steps (default: 20)
+#   SEED                  - Diffusion random seed (default: 42)
 #   DIFFUSION_TASK        - Task type: t2v, i2v, ti2v, ti2i, i2i, t2i (default: t2i)
 #   DIFFUSION_DATASET     - Dataset: vbench, trace, random (default: random)
 #   DATASET_PATH          - Optional dataset path passed to diffusion benchmark
@@ -62,6 +63,7 @@ SERVER_LOG="${SERVER_LOG:-$PWD/server.log}"
 IMAGE_WIDTH="${IMAGE_WIDTH:-1024}"
 IMAGE_HEIGHT="${IMAGE_HEIGHT:-1024}"
 NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-20}"
+SEED="${SEED:-42}"
 DIFFUSION_TASK="${DIFFUSION_TASK:-t2i}"
 DIFFUSION_DATASET="${DIFFUSION_DATASET:-random}"
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
@@ -146,6 +148,7 @@ DIFFUSION_BENCH_CMD=(
     --width "$IMAGE_WIDTH"
     --height "$IMAGE_HEIGHT"
     --num-inference-steps "$NUM_INFERENCE_STEPS"
+    --seed "$SEED"
     --num-prompts "$((CONC * 10))"
     --max-concurrency "$CONC"
     --request-rate inf
