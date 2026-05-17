@@ -2306,4 +2306,12 @@
     - "Add Z-Image-Turbo diffusion model benchmark using vLLM-Omni on H20"
     - "Script: benchmarks/single_node/zimage-turbo_bf16_h20_vllm-omni.sh"
     - "Uses vllm-omni diffusion_benchmark_serving.py for image generation metrics"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TODO
+  pr-link: https://github.com/RuixiangMa/InferenceX/compare/main...omni
+
+- config-keys:
+    - wan2.2-t2v-bf16-h20-vllm-omni
+  description:
+    - "Add Wan2.2 T2V diffusion benchmark using vLLM-Omni on H20"
+    - "Script: benchmarks/single_node/wan2.2-t2v_bf16_h20_vllm-omni.sh"
+    - "Use T2V benchmark defaults aligned with vllm-omni serving examples: 832x480, 33 frames, 40 steps, fps 16"
+  pr-link: https://github.com/RuixiangMa/InferenceX/compare/main...omni

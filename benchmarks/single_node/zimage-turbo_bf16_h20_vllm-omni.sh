@@ -67,6 +67,7 @@ SEED="${SEED:-42}"
 DIFFUSION_TASK="${DIFFUSION_TASK:-t2i}"
 DIFFUSION_DATASET="${DIFFUSION_DATASET:-random}"
 GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.90}"
+RESULT_DIR="${RESULT_DIR:-/workspace}"
 
 DIFFUSION_BENCH_SCRIPT="$(python3 -c "
 import importlib.util, os
@@ -138,11 +139,13 @@ SERVER_PID=$!
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+mkdir -p "$RESULT_DIR"
+
 DIFFUSION_BENCH_CMD=(
     python3 "$DIFFUSION_BENCH_SCRIPT"
     --backend vllm-omni
     --model "$MODEL"
-    --base-url "http://0.0.0.0:$PORT"
+    --base-url "http://127.0.0.1:$PORT"
     --dataset "$DIFFUSION_DATASET"
     --task "$DIFFUSION_TASK"
     --width "$IMAGE_WIDTH"
@@ -153,7 +156,7 @@ DIFFUSION_BENCH_CMD=(
     --max-concurrency "$CONC"
     --request-rate inf
     --warmup-requests "$((CONC * 2))"
-    --output-file "/workspace/${RESULT_FILENAME}.json"
+    --output-file "${RESULT_DIR}/${RESULT_FILENAME}.json"
 )
 
 if [[ -n "${DATASET_PATH:-}" ]]; then
@@ -185,7 +188,7 @@ set -x
 "${DIFFUSION_BENCH_CMD[@]}"
 set +x
 
-RESULT_FILE="/workspace/${RESULT_FILENAME}.json"
+RESULT_FILE="${RESULT_DIR}/${RESULT_FILENAME}.json"
 if [[ ! -f "$RESULT_FILE" ]]; then
     echo "ERROR: Benchmark output file not found: $RESULT_FILE"
     exit 1

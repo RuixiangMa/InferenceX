@@ -1,4 +1,3 @@
-import sys
 import json
 import os
 from pathlib import Path
@@ -42,12 +41,16 @@ image = base_env['IMAGE']
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
 
-if framework == 'vllm-omni':
+
+def _build_vllm_omni_data(bmk_result):
     single_node_env = get_required_env_vars(['TP'])
     tp_size = int(single_node_env['TP'])
 
     images_per_sec = float(bmk_result.get('throughput_qps', 0))
     latency_value = bmk_result.get('latency_per_sample', bmk_result.get('latency_p50'))
+    task = bmk_result.get('task')
+    modality = 'video' if task in {'t2v', 'i2v', 'ti2v'} else 'image'
+    throughput_per_gpu = images_per_sec / tp_size if tp_size > 0 else images_per_sec
 
     output_shape = {}
     if bmk_result.get('width') is not None:
@@ -64,8 +67,8 @@ if framework == 'vllm-omni':
         workload_params['fps'] = bmk_result.get('fps')
     if bmk_result.get('seed') is not None:
         workload_params['seed'] = bmk_result.get('seed')
-    if bmk_result.get('task') is not None:
-        workload_params['task'] = bmk_result.get('task')
+    if task is not None:
+        workload_params['task'] = task
     if bmk_result.get('dataset') is not None:
         workload_params['dataset'] = bmk_result.get('dataset')
 
@@ -86,15 +89,15 @@ if framework == 'vllm-omni':
         'tp': tp_size,
         'ep': 1,
         'dp_attention': 'false',
-        'tput_per_gpu': images_per_sec,
-        'output_tput_per_gpu': images_per_sec,
-        'input_tput_per_gpu': 0,
-        'modality': 'image',
+        'modality': modality,
         'workload_family': 'diffusion',
         'output_shape': output_shape,
         'workload_params': workload_params,
         'throughput': images_per_sec,
-        'throughput_per_gpu': images_per_sec,
+        'throughput_per_gpu': throughput_per_gpu,
+        'tput_per_gpu': throughput_per_gpu,
+        'output_tput_per_gpu': throughput_per_gpu,
+        'input_tput_per_gpu': 0,
         'throughput_unit': 'samples/s',
         'latency_unit': 's/sample',
     }
@@ -109,102 +112,97 @@ if framework == 'vllm-omni':
         'max_concurrency',
         'model_id',
         'backend',
-        'dataset',
-        'task',
         'width',
         'height',
-        'num_frames',
-        'num_inference_steps',
-        'fps',
-        'seed',
     }
-    data.update({k: v for k, v in bmk_result.items() if not isinstance(v, dict) and k not in excluded_keys})
-    print(json.dumps(data, indent=2))
-    with open(f'agg_{result_filename}.json', 'w') as f:
-        json.dump(data, f, indent=2)
-    sys.exit(0)
+    data.update({k: v for k, v in bmk_result.items() if k not in excluded_keys})
+    return data
 
-data = {
-    'hw': hw,
-    'conc': int(bmk_result['max_concurrency']),
-    'image': image,
-    'model': bmk_result['model_id'],
-    'infmax_model_prefix': model_prefix,
-    'framework': framework,
-    'precision': precision,
-    'spec_decoding': spec_decoding,
-    'disagg': disagg,
-    'isl': int(isl),
-    'osl': int(osl),
-}
 
-is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
-
-if is_multinode:
-    # TODO: Eventually will have to have a separate condition in here for multinode disagg and
-    # multinode agg. For now, just assume that multinode implies disagg.
-
-    multinode_env = get_required_env_vars(['PREFILL_GPUS', 'DECODE_GPUS', 'PREFILL_NUM_WORKERS', 'PREFILL_TP',
-                                          'PREFILL_EP', 'PREFILL_DP_ATTN', 'DECODE_NUM_WORKERS', 'DECODE_TP', 'DECODE_EP', 'DECODE_DP_ATTN'])
-    prefill_gpus = int(multinode_env['PREFILL_GPUS'])
-    decode_gpus = int(multinode_env['DECODE_GPUS'])
-    prefill_num_workers = int(multinode_env['PREFILL_NUM_WORKERS'])
-    prefill_tp = int(multinode_env['PREFILL_TP'])
-    prefill_ep = int(multinode_env['PREFILL_EP'])
-    prefill_dp_attn = multinode_env['PREFILL_DP_ATTN']
-    decode_num_workers = int(multinode_env['DECODE_NUM_WORKERS'])
-    decode_tp = int(multinode_env['DECODE_TP'])
-    decode_ep = int(multinode_env['DECODE_EP'])
-    decode_dp_attn = multinode_env['DECODE_DP_ATTN']
-
-    total_gpus = prefill_gpus + decode_gpus
-    if total_gpus <= 0:
-        raise ValueError("Multinode results require at least one GPU.")
-    if prefill_gpus <= 0:
-        raise ValueError("Multinode results require at least one prefill GPU.")
-
-    output_tput_denominator = decode_gpus if decode_gpus > 0 else total_gpus
-    output_decode_tp = decode_tp if decode_gpus > 0 else 0
-    output_decode_ep = decode_ep if decode_gpus > 0 else 0
-
-    multi_node_data = {
-        'is_multinode': True,
-        'prefill_tp': prefill_tp,
-        'prefill_ep': prefill_ep,
-        'prefill_dp_attention': prefill_dp_attn,
-        'prefill_num_workers': prefill_num_workers,
-        'decode_tp': output_decode_tp,
-        'decode_ep': output_decode_ep,
-        'decode_dp_attention': decode_dp_attn,
-        'decode_num_workers': decode_num_workers,
-        'num_prefill_gpu': prefill_gpus,
-        'num_decode_gpu': decode_gpus,
-        'tput_per_gpu': float(bmk_result['total_token_throughput']) / total_gpus,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / output_tput_denominator,
-        'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
-    }
-
-    data = data | multi_node_data
+if framework == 'vllm-omni':
+    data = _build_vllm_omni_data(bmk_result)
 else:
-    if disagg:
-        raise ValueError("Disaggregated mode requires multinode setup.")
-
-    single_node_env = get_required_env_vars(['TP', 'EP_SIZE', 'DP_ATTENTION'])
-    tp_size = int(single_node_env['TP'])
-    ep_size = int(single_node_env['EP_SIZE'])
-    dp_attention = single_node_env['DP_ATTENTION']
-
-    single_node_data = {
-        'is_multinode': False,
-        'tp': tp_size,
-        'ep': ep_size,
-        'dp_attention': dp_attention,
-        'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
-        'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
+    data = {
+        'hw': hw,
+        'conc': int(bmk_result['max_concurrency']),
+        'image': image,
+        'model': bmk_result['model_id'],
+        'infmax_model_prefix': model_prefix,
+        'framework': framework,
+        'precision': precision,
+        'spec_decoding': spec_decoding,
+        'disagg': disagg,
+        'isl': int(isl),
+        'osl': int(osl),
     }
 
-    data = data | single_node_data
+    is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
+
+    if is_multinode:
+        # TODO: Eventually will have to have a separate condition in here for multinode disagg and
+        # multinode agg. For now, just assume that multinode implies disagg.
+
+        multinode_env = get_required_env_vars(['PREFILL_GPUS', 'DECODE_GPUS', 'PREFILL_NUM_WORKERS', 'PREFILL_TP',
+                                              'PREFILL_EP', 'PREFILL_DP_ATTN', 'DECODE_NUM_WORKERS', 'DECODE_TP', 'DECODE_EP', 'DECODE_DP_ATTN'])
+        prefill_gpus = int(multinode_env['PREFILL_GPUS'])
+        decode_gpus = int(multinode_env['DECODE_GPUS'])
+        prefill_num_workers = int(multinode_env['PREFILL_NUM_WORKERS'])
+        prefill_tp = int(multinode_env['PREFILL_TP'])
+        prefill_ep = int(multinode_env['PREFILL_EP'])
+        prefill_dp_attn = multinode_env['PREFILL_DP_ATTN']
+        decode_num_workers = int(multinode_env['DECODE_NUM_WORKERS'])
+        decode_tp = int(multinode_env['DECODE_TP'])
+        decode_ep = int(multinode_env['DECODE_EP'])
+        decode_dp_attn = multinode_env['DECODE_DP_ATTN']
+
+        total_gpus = prefill_gpus + decode_gpus
+        if total_gpus <= 0:
+            raise ValueError("Multinode results require at least one GPU.")
+        if prefill_gpus <= 0:
+            raise ValueError("Multinode results require at least one prefill GPU.")
+
+        output_tput_denominator = decode_gpus if decode_gpus > 0 else total_gpus
+        output_decode_tp = decode_tp if decode_gpus > 0 else 0
+        output_decode_ep = decode_ep if decode_gpus > 0 else 0
+
+        multi_node_data = {
+            'is_multinode': True,
+            'prefill_tp': prefill_tp,
+            'prefill_ep': prefill_ep,
+            'prefill_dp_attention': prefill_dp_attn,
+            'prefill_num_workers': prefill_num_workers,
+            'decode_tp': output_decode_tp,
+            'decode_ep': output_decode_ep,
+            'decode_dp_attention': decode_dp_attn,
+            'decode_num_workers': decode_num_workers,
+            'num_prefill_gpu': prefill_gpus,
+            'num_decode_gpu': decode_gpus,
+            'tput_per_gpu': float(bmk_result['total_token_throughput']) / total_gpus,
+            'output_tput_per_gpu': float(bmk_result['output_throughput']) / output_tput_denominator,
+            'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
+        }
+
+        data = data | multi_node_data
+    else:
+        if disagg:
+            raise ValueError("Disaggregated mode requires multinode setup.")
+
+        single_node_env = get_required_env_vars(['TP', 'EP_SIZE', 'DP_ATTENTION'])
+        tp_size = int(single_node_env['TP'])
+        ep_size = int(single_node_env['EP_SIZE'])
+        dp_attention = single_node_env['DP_ATTENTION']
+
+        single_node_data = {
+            'is_multinode': False,
+            'tp': tp_size,
+            'ep': ep_size,
+            'dp_attention': dp_attention,
+            'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
+            'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
+            'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
+        }
+
+        data = data | single_node_data
 
 for key, value in bmk_result.items():
     if key.endswith('ms'):

@@ -8335,3 +8335,26 @@ zimage-turbo-bf16-h20-vllm-omni:
       osl: 0
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 16 }
+
+wan2.2-t2v-bf16-h20-vllm-omni:
+  image: vllm/vllm-omni:v0.20.0
+  model: Wan-AI/Wan2.2-T2V-A14B-Diffusers
+  model-prefix: wan2.2-t2v
+  runner: h20
+  precision: bf16
+  framework: vllm-omni
+  task: t2v
+  width: 832
+  height: 480
+  num-frames: 33
+  fps: 16
+  num-inference-steps: 40
+  seed: 42
+  dataset: random
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 0
+      osl: 0
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 2 }

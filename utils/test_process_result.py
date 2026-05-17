@@ -12,6 +12,7 @@ from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).parent / "process_result.py"
 BENCHMARK_SCRIPT_PATH = Path(__file__).parent.parent / "benchmarks" / "single_node" / "zimage-turbo_bf16_h20_vllm-omni.sh"
+WAN_BENCHMARK_SCRIPT_PATH = Path(__file__).parent.parent / "benchmarks" / "single_node" / "wan2.2-t2v_bf16_h20_vllm-omni.sh"
 
 
 # =============================================================================
@@ -39,6 +40,8 @@ def sample_benchmark_result():
 def sample_vllm_omni_benchmark_result():
     """Sample diffusion benchmark result JSON for vLLM-Omni."""
     return {
+        "model_id": "Tongyi-MAI/Z-Image-Turbo",
+        "max_concurrency": 12,
         "throughput_qps": 3.25,
         "latency_p50": 2.1,
         "latency_p99": 4.8,
@@ -345,24 +348,22 @@ class TestVllmOmniProcessResult:
         assert output_data["tp"] == 8
         assert output_data["ep"] == 1
         assert output_data["dp_attention"] == "false"
-        assert output_data["conc"] == 0
-        assert output_data["model"] == ""
+        assert output_data["conc"] == 12
+        assert output_data["model"] == "Tongyi-MAI/Z-Image-Turbo"
 
-        assert output_data["tput_per_gpu"] == pytest.approx(3.25)
-        assert output_data["output_tput_per_gpu"] == pytest.approx(3.25)
+        assert output_data["tput_per_gpu"] == pytest.approx(3.25 / 8)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(3.25 / 8)
         assert output_data["input_tput_per_gpu"] == 0
         assert output_data["modality"] == "image"
         assert output_data["workload_family"] == "diffusion"
         assert output_data["throughput"] == pytest.approx(3.25)
-        assert output_data["throughput_per_gpu"] == pytest.approx(3.25)
+        assert output_data["throughput_per_gpu"] == pytest.approx(3.25 / 8)
         assert output_data["throughput_unit"] == "samples/s"
         assert output_data["latency"] == pytest.approx(2.1)
         assert output_data["latency_unit"] == "s/sample"
 
         assert output_data["latency_p50"] == pytest.approx(2.1)
         assert output_data["latency_p99"] == pytest.approx(4.8)
-        assert output_data["width"] == 1024
-        assert output_data["height"] == 1024
         assert output_data["output_shape"] == {"width": 1024, "height": 1024}
         assert output_data["num_inference_steps"] == 20
         assert output_data["task"] == "t2i"
@@ -372,7 +373,7 @@ class TestVllmOmniProcessResult:
             "task": "t2i",
             "dataset": "random",
         }
-        assert "stage_breakdown" not in output_data
+        assert output_data["stage_breakdown"] == {"denoise": 1.7}
 
     def test_vllm_omni_preserves_adapted_fields(self, tmp_path, vllm_omni_env_vars):
         """Adapted max_concurrency/model_id fields from the benchmark script should survive aggregation."""
@@ -390,9 +391,27 @@ class TestVllmOmniProcessResult:
         output_data = json.loads(result.stdout)
         assert output_data["conc"] == 12
         assert output_data["model"] == "Tongyi-MAI/Z-Image-Turbo"
-        assert output_data["width"] == 2048
-        assert output_data["height"] == 2048
         assert output_data["output_shape"] == {"width": 2048, "height": 2048}
+
+
+    def test_vllm_omni_video_task_maps_to_video_modality(self, tmp_path, vllm_omni_env_vars):
+        benchmark_result = {
+            "model_id": "Wan-AI/Wan2.2-T2V-A14B-Diffusers",
+            "max_concurrency": 2,
+            "throughput_qps": 0.5,
+            "task": "t2v",
+            "num_frames": 81,
+            "fps": 16,
+        }
+
+        result = run_script(tmp_path, vllm_omni_env_vars, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["modality"] == "video"
+        assert output_data["workload_params"]["task"] == "t2v"
+        assert output_data["workload_params"]["num_frames"] == 81
+        assert output_data["workload_params"]["fps"] == 16
 
     def test_vllm_omni_requires_tp(self, tmp_path, sample_vllm_omni_benchmark_result, base_env_vars):
         """vLLM-Omni aggregation still requires TP metadata for dashboard compatibility."""
@@ -413,7 +432,8 @@ class TestVllmOmniBenchmarkScript:
 
         assert 'vllm serve "$MODEL" --omni' in script
         assert '--backend vllm-omni' in script
-        assert '--output-file "/workspace/${RESULT_FILENAME}.json"' in script
+        assert '--output-file "${RESULT_DIR}/${RESULT_FILENAME}.json"' in script
+        assert '--base-url "http://127.0.0.1:$PORT"' in script
 
     def test_script_adapts_diffusion_output_for_process_result(self):
         script = BENCHMARK_SCRIPT_PATH.read_text()
@@ -421,6 +441,32 @@ class TestVllmOmniBenchmarkScript:
         assert "'max_concurrency': int(conc)" in script
         assert "'model_id': model" in script
         assert 'adapted.update(diffusion)' in script
+
+    def test_script_uses_result_dir_variable(self):
+        script = BENCHMARK_SCRIPT_PATH.read_text()
+        wrapper = (SCRIPT_PATH.parent.parent / "vllm-omni_run_and_process.sh").read_text()
+
+        assert 'RESULT_DIR="${RESULT_DIR:-/workspace}"' in script
+        assert '--output-file "${RESULT_DIR}/${RESULT_FILENAME}.json"' in script
+        assert 'RESULT_FILE="${RESULT_DIR}/${RESULT_FILENAME}.json"' in script
+        assert 'RESULT_DIR="$RESULT_DIR" \\' in wrapper
+        assert '"$BENCH_SCRIPT"' in wrapper
+
+
+class TestWan22T2VBenchmarkScript:
+    """Static contract tests for the Wan2.2 T2V vLLM-Omni benchmark wrapper."""
+
+    def test_script_sets_expected_t2v_defaults(self):
+        script = WAN_BENCHMARK_SCRIPT_PATH.read_text()
+
+        assert 'BASE_SCRIPT="$SCRIPT_DIR/zimage-turbo_bf16_h20_vllm-omni.sh"' in script
+        assert 'MODEL="${MODEL:-Wan-AI/Wan2.2-T2V-A14B-Diffusers}"' in script
+        assert 'DIFFUSION_TASK="${DIFFUSION_TASK:-t2v}"' in script
+        assert 'IMAGE_WIDTH="${IMAGE_WIDTH:-832}"' in script
+        assert 'IMAGE_HEIGHT="${IMAGE_HEIGHT:-480}"' in script
+        assert 'NUM_INFERENCE_STEPS="${NUM_INFERENCE_STEPS:-40}"' in script
+        assert 'NUM_FRAMES="${NUM_FRAMES:-33}"' in script
+        assert 'FPS="${FPS:-16}"' in script
 
 
 # =============================================================================
